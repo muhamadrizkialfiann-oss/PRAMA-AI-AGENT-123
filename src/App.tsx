@@ -298,6 +298,25 @@ export default function App() {
     }
   };
 
+  const handleDeleteUser = async (emailToDelete: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus data pendaftaran akun untuk "${emailToDelete}" secara permanen?`)) {
+      try {
+        await deleteDoc(doc(db, 'users', emailToDelete));
+        setSystemAlert({
+          type: 'success',
+          text: `Akun pendaftaran ${emailToDelete} berhasil dihapus dari database!`
+        });
+        await fetchRegisteredUsers();
+      } catch (err: any) {
+        console.error("Gagal menghapus pendaftar:", err);
+        setSystemAlert({
+          type: 'danger',
+          text: `Gagal menghapus pendaftar: ${err.message || 'Izin ditolak'}`
+        });
+      }
+    }
+  };
+
   const handleOpenArticleDetail = (art: UploadedArticle) => {
     setActiveArticleDetail(art);
     setModalActiveTab('preview');
@@ -489,19 +508,53 @@ export default function App() {
     });
   };
 
-  const handleDeleteArticle = (id: string, name: string) => {
+  const handleDeleteArticle = async (id: string, name: string) => {
     if (confirm(`Apakah Anda yakin ingin menghapus dokumen "${name}"?`)) {
-      setArticles(prev => prev.filter(art => art.id !== id));
-      setSelectedReferenceArticleIds(prev => prev.filter(selectedId => selectedId !== id));
-      
-      // Delete document from Firestore
-      deleteDoc(doc(db, 'articles', id))
-        .catch(err => console.error("Gagal menghapus dokumen dari Firestore:", err));
+      try {
+        // Optimistically remove from state
+        setArticles(prev => prev.filter(art => art.id !== id));
+        setSelectedReferenceArticleIds(prev => prev.filter(selectedId => selectedId !== id));
+        
+        // Delete document from Firestore
+        await deleteDoc(doc(db, 'articles', id));
 
-      setSystemAlert({
-        type: 'info',
-        text: `Dokumen "${name}" dihapus dari repositori cloud.`
-      });
+        setSystemAlert({
+          type: 'success',
+          text: `Dokumen "${name}" berhasil dihapus secara permanen dari Cloud Firestore.`
+        });
+      } catch (err: any) {
+        console.error("Gagal menghapus dokumen dari Firestore:", err);
+        setSystemAlert({
+          type: 'danger',
+          text: `Gagal menghapus dokumen dari database cloud: ${err.message || 'Izin ditolak'}`
+        });
+        
+        // Rollback and reload articles from Firestore
+        try {
+          const colRef = collection(db, 'articles');
+          const snap = await getDocs(colRef);
+          const list: UploadedArticle[] = [];
+          snap.forEach(docSnap => {
+            const data = docSnap.data();
+            list.push({
+              id: docSnap.id,
+              title: data.title || '',
+              content: data.content || '',
+              sourceType: data.sourceType || 'Text File',
+              fileSize: data.fileSize || '0 KB',
+              uploadedAt: data.uploadedAt || new Date().toISOString(),
+              tags: data.tags || [],
+              excerpt: data.excerpt,
+              rawData: data.rawData,
+              fileName: data.fileName
+            });
+          });
+          list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+          setArticles(list);
+        } catch (reloadErr) {
+          console.error("Error reloading after delete failure:", reloadErr);
+        }
+      }
     }
   };
 
@@ -1586,11 +1639,11 @@ Silakan gunakan tombol ekspor di bawah untuk mengambil template kalkulasi rancan
                                 {isMaster || isDemo ? (
                                   <span className="text-[10px] text-slate-400 font-mono italic">Kunci Sistem</span>
                                 ) : (
-                                  <div className="flex gap-1.5 justify-end">
+                                  <div className="flex gap-1.5 justify-end items-center">
                                     <button
                                       onClick={() => handleUserStatusUpdate(user.email, 'approved')}
                                       disabled={user.status === 'approved'}
-                                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border ${
+                                      className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border ${
                                         user.status === 'approved'
                                           ? 'bg-slate-50 text-slate-300 border-slate-200'
                                           : 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shadow-xs'
@@ -1601,13 +1654,19 @@ Silakan gunakan tombol ekspor di bawah untuk mengambil template kalkulasi rancan
                                     <button
                                       onClick={() => handleUserStatusUpdate(user.email, 'rejected')}
                                       disabled={user.status === 'rejected'}
-                                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border ${
+                                      className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border ${
                                         user.status === 'rejected'
                                           ? 'bg-slate-50 text-slate-300 border-slate-200'
                                           : 'bg-white hover:bg-red-50 text-red-500 hover:text-red-700 border-slate-100'
                                       }`}
                                     >
                                       Tolak
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUser(user.email)}
+                                      className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-800 border-red-200 shadow-xs"
+                                    >
+                                      Hapus
                                     </button>
                                   </div>
                                 )}
