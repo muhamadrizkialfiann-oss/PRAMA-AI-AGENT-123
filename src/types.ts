@@ -44,3 +44,17 @@ export interface CalculationTemplate {
     operation: 'sum' | 'percentage';
   };
 }
+
+export interface UploadedArticle {
+  id: string;
+  title: string;
+  content: string;
+  sourceType: string; // e.g., 'PDF Document', 'Word DOC', 'Excel Sheets', 'Text File'
+  fileSize?: string;
+  uploadedAt: string; // ISO string or human formatted date
+  tags: string[];
+  excerpt?: string;
+  rawData?: string; // Original content data-url or source
+  fileName?: string; // Original filename uploaded
+}
+

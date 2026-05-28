@@ -190,7 +190,7 @@ app.get("/api/health", (req, res) => {
 
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, history, division, attachedFile } = req.body;
+    const { message, history, division, attachedFile, referenceArticles } = req.body;
 
     if (!message && !attachedFile) {
       return res.status(400).json({ error: "Message or attachedFile is required" });
@@ -203,7 +203,15 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const systemInstruction = SYSTEM_INSTRUCTIONS[division?.toLowerCase()] || SYSTEM_INSTRUCTIONS.comercial;
+    let systemInstruction = SYSTEM_INSTRUCTIONS[division?.toLowerCase()] || SYSTEM_INSTRUCTIONS.comercial;
+
+    if (referenceArticles && referenceArticles.length > 0) {
+      const articlesGrounding = referenceArticles.map((art: any, idx: number) => (
+        `[DOKUMEN REFERENSI #${idx + 1}]\nJUDUL: ${art.title}\nTIPE: ${art.sourceType}\nKONTEN:\n${art.content}`
+      )).join("\n\n---\n\n");
+
+      systemInstruction += `\n\n=========================================\nINFO KORPORASI & REFERENSI BERKAS TAMBAHAN (Grounding Data):\nBerikut adalah dokumen/artikel referensi aktif yang diunggah pengguna. Gunakan data, standar, atau SOP ini dalam memformulasikan rancangan draf proposal, audit, atau Klausul Hukum Anda:\n\n${articlesGrounding}\n=========================================\n`;
+    }
 
     // Convert history format to system format
     // Expect history: Array of { role: 'user' | 'model', parts: [{ text: string }] }

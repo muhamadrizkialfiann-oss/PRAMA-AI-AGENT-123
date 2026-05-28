@@ -82,3 +82,61 @@ export const DIVISIONS: Division[] = [
     ]
   }
 ];
+
+export const INITIAL_ARTICLES = [
+  {
+    id: 'art-1',
+    title: 'SOP Hubungan Pengemudi & Kebijakan Kepatuhan Muatan ODOL 2026',
+    content: `DOKUMEN REGULASI INTERNAL PANCARAN GROUP - 2026
+Bagian I: Kebijakan Batas Muatan Armada Darat (Over Dimension Over Loading - ODOL)
+1. Setiap unit armada truk trailer Hino500 yang beroperasi di wilayah Jawa dan Sumatera wajib mengikuti ketentuan berat muatan maksimum (JBI) yang diterbitkan oleh Dinas Perhubungan RI.
+2. Pelanggaran batas tonase > 10% tidak akan ditolerir dan biaya denda jembatan timbang sepenuhnya dibebankan pada pengemudi jika terbukti mengabaikan manifes atau surat jalan resmi Pancaran Group.
+3. Struktur sanksi pelanggaran ODOL:
+- Teguran lisan pertama
+- Surat Peringatan SP1 dengan penangguhan bonus ritase selama 2 minggu
+- SP3 / Pemutusan hubungan kerja kemitraan driver jika melanggar berulang kali.
+
+Bagian II: Keselamatan & Kesehatan Kerja Driver
+- Kecepatan maksimum di jalan tol: 70 km/jam.
+- Kecepatan maksimum di jalur arteri non-tol: 40 km/jam.
+- Setiap pengemudi wajib beristirahat minimal 30 menit setelah berkendara selama 4 jam berturut-turut.`,
+    sourceType: 'PDF Document',
+    fileSize: '24.5 KB',
+    uploadedAt: '2026-05-15T08:00:00Z',
+    tags: ['LGA', 'Driver Policy', 'Safety'],
+    excerpt: 'Surat Keputusan (SK) Direksi No. SK-089-2026 tentang tata cara penegakan regulasi Over Dimension & Over Loading (ODOL) serta K3 Driver logistik darat.'
+  },
+  {
+    id: 'art-2',
+    title: 'Pedoman Penawaran Tarif Logistik & Formulasi Margin Tender Korporasi',
+    content: `PANCARAN KOALISI LOGISTIK - PEDOMAN DEPARTEMEN KOMERSIAL
+Formulasi Harga Satuan Penawaran Proyek Logistik Batubara & CPO:
+1. Penentuan BEP Armada Laut (Tugboat & Barge 300 kaki):
+   BEP per Ritase = (Biaya Sewa Kapal harian * Hari Siklus Rute) + Estimasi BBM Solar Rute + Biaya Keagenan Pelabuhan + Pajak PPN 11%.
+2. Formula Target Profit Margin:
+   - Kontrak kerja jangka pendek (< 6 bulan): Target Gross profit margin minimum 22%.
+   - Kontrak kerja jangka panjang (> 1 tahun): Target Gross profit margin minimum 14% dengan jaminan volume minimum shipment bulanan (MGM).
+3. Parameter Bidding Kompetitor:
+   Selalu lakukan investigasi harga pasar kompetitor per ton/mile sebelum submit draf proposal melalui portal e-procurement klien.`,
+    sourceType: 'Excel Sheets',
+    fileSize: '15.2 KB',
+    uploadedAt: '2026-05-20T10:30:00Z',
+    tags: ['Comercial', 'Pricing', 'BEP Formula'],
+    excerpt: 'Matriks acuan negosiasi margin kargo bagi seluruh staf akuntansi komersial dan manager business development.'
+  },
+  {
+    id: 'art-3',
+    title: 'SOP Kalibrasi Digital Flow-Meter Depo Pengisian BBM Solar Pancaran',
+    content: `SPIA & COMPLIANCE STANDARD - DEPO INTERNAL MERAK
+Prosedur Audit dan Kalibrasi Alat Ukur Aliran Bahan Bakar (Digital Flow-Meter):
+- Kalibrasi wajib dilakukan minimal satu kali dalam 12 bulan oleh Balai Metrologi resmi bersertifikat.
+- Selisih toleransi pengukuran (meter factor) antara pencatatan flow-meter digital dengan volume sounding manual tangki pendam tidak boleh melebihi batas 0.15%.
+- Jika ditemukan variansi pengisian solar armada darat > 1.5% secara berulang selama 3 kali pengisian, maka alat ukur wajib disegel sementara dan tim SPIA berhak melakukan investigasi audit forensik pengisian bahan bakar.`,
+    sourceType: 'Word DOC',
+    fileSize: '31.1 KB',
+    uploadedAt: '2026-05-25T14:15:00Z',
+    tags: ['SPIA', 'Depot Audit', 'Fuel Control'],
+    excerpt: 'Tata cara operasional audit berkala terhadap instrumen digital pemakaian solar guna menegasikan potensi fraud solar.'
+  }
+];
+
