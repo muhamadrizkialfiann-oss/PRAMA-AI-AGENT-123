@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // User validation structures
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'password', 'fullName', 'role', 'status', 'createdAt'])
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+        && data.password is string && data.password.size() >= 4 && data.password.size() <= 100
+        && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 200
+        && data.role is string && (data.role == 'admin' || data.role == 'user')
+        && data.status is string && (data.status == 'approved' || data.status == 'pending' || data.status == 'rejected');
+    }
+
+    // Article validation structures
+    function isValidArticle(data) {
+      return data.keys().hasAll(['title', 'content', 'sourceType', 'uploadedAt', 'tags'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.content is string
+        && data.sourceType is string
+        && data.uploadedAt is string
+        && data.tags is list;
+    }
+
+    // Match rules for users collection
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isValidUser(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Match rules for articles collection
+    match /articles/{articleId} {
+      allow read: if true;
+      allow create, update: if isValidArticle(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Match rules for test connection collection
+    match /test-connection-status/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

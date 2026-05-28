@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User accounts registered for PRAMA system and status of approval.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "status": { "type": "string", "enum": ["approved", "pending", "rejected"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "password", "fullName", "role", "status"]
+    },
+    "Article": {
+      "title": "Article",
+      "description": "Uploaded or manually written articles/documents for AI references.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "sourceType": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "rawData": { "type": "string" },
+        "tags": { "type": "array" },
+        "uploadedAt": { "type": "string" }
+      },
+      "required": ["title", "content", "sourceType", "uploadedAt", "tags"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Registered and master user database records."
+    },
+    "/articles/{articleId}": {
+      "schema": "Article",
+      "description": "Shared reference files/documents for AI grounding."
+    }
+  }
+}

@@ -58,3 +58,14 @@ export interface UploadedArticle {
   fileName?: string; // Original filename uploaded
 }
 
+export interface MemberUser {
+  id: string;
+  email: string;
+  password: string;
+  fullName: string;
+  role: 'admin' | 'user';
+  status: 'approved' | 'pending' | 'rejected';
+  division?: string;
+  createdAt: string;
+}
+

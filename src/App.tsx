@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DIVISIONS, INITIAL_ARTICLES } from './data';
-import { DivisionId, ChatMessage, UploadedArticle } from './types';
+import { DivisionId, ChatMessage, UploadedArticle, MemberUser } from './types';
 import LoginView from './components/LoginView';
 import LandingPage from './components/LandingPage';
 import PancaranLogo from './components/PancaranLogo';
+import { db } from './utils/firebase';
+import { doc, collection, getDocs, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { 
   exportToWord, 
   exportToExcel, 
@@ -172,13 +174,8 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reference materials & articles repository states
-  const [articles, setArticles] = useState<UploadedArticle[]>(() => {
-    const saved = localStorage.getItem('prama_uploaded_articles');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { return INITIAL_ARTICLES; }
-    }
-    return INITIAL_ARTICLES;
-  });
+  const [articles, setArticles] = useState<UploadedArticle[]>([]);
+  const [isArticlesLoading, setIsArticlesLoading] = useState(true);
   const [selectedReferenceArticleIds, setSelectedReferenceArticleIds] = useState<string[]>(() => {
     const saved = localStorage.getItem('prama_selected_articles');
     if (saved) {
@@ -186,13 +183,120 @@ export default function App() {
     }
     return [];
   });
-  const [activeDashboardTab, setActiveDashboardTab] = useState<'divisions' | 'articles'>('divisions');
+  const [activeDashboardTab, setActiveDashboardTab] = useState<'divisions' | 'articles' | 'accounts'>('divisions');
   const [articleSearchText, setArticleSearchText] = useState('');
   const [activeArticleDetail, setActiveArticleDetail] = useState<UploadedArticle | null>(null);
   const [modalActiveTab, setModalActiveTab] = useState<'info' | 'preview'>('preview');
   const [isFullScreenView, setIsFullScreenView] = useState(false);
   const [documentFontSize, setDocumentFontSize] = useState<number>(13);
   const [documentSearchTerm, setDocumentSearchTerm] = useState<string>('');
+
+  // Member management states for admin approval dashboard
+  const [registeredUsers, setRegisteredUsers] = useState<MemberUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
+  // Sync articles from Firestore
+  useEffect(() => {
+    async function syncArticles() {
+      try {
+        setIsArticlesLoading(true);
+        const colRef = collection(db, 'articles');
+        const snap = await getDocs(colRef);
+        
+        let fetchedArticles: UploadedArticle[] = [];
+        if (snap.empty) {
+          // No articles exist in Firebase yet! Let's seed the database collection with default INITIAL_ARTICLES
+          console.log("Seeding initial articles reference to Firestore...");
+          for (const art of INITIAL_ARTICLES) {
+            await setDoc(doc(db, 'articles', art.id), art);
+          }
+          fetchedArticles = [...INITIAL_ARTICLES];
+        } else {
+          snap.forEach(docSnap => {
+            const data = docSnap.data();
+            fetchedArticles.push({
+              id: docSnap.id,
+              title: data.title || '',
+              content: data.content || '',
+              sourceType: data.sourceType || 'Text File',
+              fileSize: data.fileSize || '0 KB',
+              uploadedAt: data.uploadedAt || new Date().toISOString(),
+              tags: data.tags || [],
+              excerpt: data.excerpt,
+              rawData: data.rawData,
+              fileName: data.fileName
+            });
+          });
+        }
+        
+        // Sort descending by uploadedAt
+        fetchedArticles.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+        setArticles(fetchedArticles);
+      } catch (err) {
+        console.error("Gagal sinkronisasi artikel dari Firestore:", err);
+        // Fallback local storage
+        const saved = localStorage.getItem('prama_uploaded_articles');
+        if (saved) {
+          try { setArticles(JSON.parse(saved)); } catch (e) { setArticles(INITIAL_ARTICLES); }
+        } else {
+          setArticles(INITIAL_ARTICLES);
+        }
+      } finally {
+        setIsArticlesLoading(false);
+      }
+    }
+    syncArticles();
+  }, []);
+
+  const fetchRegisteredUsers = async () => {
+    if (userEmail !== 'muhamadrizkialfiann@gmail.com') return;
+    try {
+      setIsLoadingUsers(true);
+      const snap = await getDocs(collection(db, 'users'));
+      const list: MemberUser[] = [];
+      snap.forEach(d => {
+        const data = d.data();
+        list.push({
+          id: d.id,
+          email: data.email || d.id,
+          password: data.password || '',
+          fullName: data.fullName || '',
+          role: data.role || 'user',
+          status: data.status || 'pending',
+          division: data.division || 'comercial',
+          createdAt: data.createdAt || new Date().toISOString()
+        });
+      });
+      // Sort by createdAt desc
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setRegisteredUsers(list);
+    } catch (err) {
+      console.error("Error loading users from firestore:", err);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userEmail === 'muhamadrizkialfiann@gmail.com') {
+      fetchRegisteredUsers();
+    }
+  }, [userEmail]);
+
+  const handleUserStatusUpdate = async (emailToUpdate: string, newStatus: 'approved' | 'rejected') => {
+    try {
+      const userRef = doc(db, 'users', emailToUpdate);
+      await updateDoc(userRef, { status: newStatus });
+      setSystemAlert({
+        type: 'success',
+        text: `Akun pendaftaran ${emailToUpdate} berhasil disetujui (${newStatus.toUpperCase()})!`
+      });
+      await fetchRegisteredUsers();
+    } catch (err: any) {
+      console.error("Gagal memperbarui status user:", err);
+      setRegisteredUsers(prev => prev.map(u => u.email === emailToUpdate ? { ...u, status: newStatus } : u));
+    }
+  };
 
   const handleOpenArticleDetail = (art: UploadedArticle) => {
     setActiveArticleDetail(art);
@@ -216,11 +320,7 @@ export default function App() {
   const [editArticleSourceType, setEditArticleSourceType] = useState('PDF Document');
   const [editArticleTags, setEditArticleTags] = useState('');
 
-  // Sync state changes to storage
-  useEffect(() => {
-    localStorage.setItem('prama_uploaded_articles', JSON.stringify(articles));
-  }, [articles]);
-
+  // Sync selected reference ids changes to local storage
   useEffect(() => {
     localStorage.setItem('prama_selected_articles', JSON.stringify(selectedReferenceArticleIds));
   }, [selectedReferenceArticleIds]);
@@ -328,12 +428,16 @@ export default function App() {
 
       setArticles(prev => [newArticle, ...prev]);
       
+      // Save newly uploaded file to Firestore of course
+      setDoc(doc(db, 'articles', newArticle.id), newArticle)
+        .catch(err => console.error("Gagal menyimpan file baru ke Firestore:", err));
+      
       // Auto-toggle active so it grounds the answers immediately
       setSelectedReferenceArticleIds(prev => [...prev, newArticle.id]);
       
       setSystemAlert({
         type: 'success',
-        text: `Dokumen "${file.name}" berhasil diunggah & dikonversi ke Base64 sebagai material referensi AI.`
+        text: `Dokumen "${file.name}" berhasil diunggah & disimpan di cloud Firestore sebagai material referensi AI.`
       });
     };
     reader.onerror = () => {
@@ -369,6 +473,10 @@ export default function App() {
 
     setArticles(prev => [created, ...prev]);
     setSelectedReferenceArticleIds(prev => [...prev, created.id]); // auto select
+
+    // Save manually created document to Firestore
+    setDoc(doc(db, 'articles', created.id), created)
+      .catch(err => console.error("Gagal menyimpan dokumen baru ke Firestore:", err));
     
     // Clear state
     setNewArticleTitle('');
@@ -377,7 +485,7 @@ export default function App() {
     
     setSystemAlert({
       type: 'success',
-      text: `Artikel/Dokumen "${created.title}" berhasil ditambahkan secara manual!`
+      text: `Artikel/Dokumen "${created.title}" berhasil disimpan di cloud Firestore!`
     });
   };
 
@@ -385,9 +493,14 @@ export default function App() {
     if (confirm(`Apakah Anda yakin ingin menghapus dokumen "${name}"?`)) {
       setArticles(prev => prev.filter(art => art.id !== id));
       setSelectedReferenceArticleIds(prev => prev.filter(selectedId => selectedId !== id));
+      
+      // Delete document from Firestore
+      deleteDoc(doc(db, 'articles', id))
+        .catch(err => console.error("Gagal menghapus dokumen dari Firestore:", err));
+
       setSystemAlert({
         type: 'info',
-        text: `Dokumen "${name}" dihapus dari repositori.`
+        text: `Dokumen "${name}" dihapus dari repositori cloud.`
       });
     }
   };
@@ -425,6 +538,11 @@ export default function App() {
           sourceType: editArticleSourceType,
           tags: updatedTags
         };
+
+        // Update the edited document in Firestore database
+        setDoc(doc(db, 'articles', id), updated)
+          .catch(err => console.error("Gagal memperbarui artikel di Firestore:", err));
+
         // Update active article detail referencing so model receives the latest content
         if (activeArticleDetail?.id === id) {
           setActiveArticleDetail(updated);
@@ -437,7 +555,7 @@ export default function App() {
     
     setSystemAlert({
       type: 'success',
-      text: `Dokumen "${editArticleTitle}" berhasil diperbarui!`
+      text: `Dokumen "${editArticleTitle}" berhasil diperbarui di cloud Firestore!`
     });
   };
 
@@ -928,9 +1046,28 @@ Silakan gunakan tombol ekspor di bawah untuk mengambil template kalkulasi rancan
                   </span>
                 )}
               </button>
+
+              {userEmail === 'muhamadrizkialfiann@gmail.com' && (
+                <button
+                  onClick={() => setActiveDashboardTab('accounts')}
+                  className={`py-3 px-5 text-xs sm:text-sm font-black flex items-center gap-2 border-b-3 transition-all cursor-pointer relative ${
+                    activeDashboardTab === 'accounts'
+                      ? 'border-[#00A4E4] text-[#0B2C56]'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <Users className="h-4 w-4" />
+                  <span>Manajemen Akun Pendaftaran</span>
+                  {registeredUsers.filter(u => u.status === 'pending').length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[9px] font-mono font-bold text-white bg-amber-500 rounded-full leading-none animate-pulse">
+                      {registeredUsers.filter(u => u.status === 'pending').length}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
 
-            {activeDashboardTab === 'divisions' ? (
+            {activeDashboardTab === 'divisions' && (
               <>
                 {/* Division Hub Grid Segment */}
                 <section className="flex flex-col gap-5">
@@ -1049,7 +1186,9 @@ Silakan gunakan tombol ekspor di bawah untuk mengambil template kalkulasi rancan
               </div>
             </section>
               </>
-            ) : (
+            )}
+
+            {activeDashboardTab === 'articles' && (
               <div className="flex flex-col lg:flex-row gap-8 animate-fade-in" id="articles-management-panel">
                 
                 {/* COLUMN 1: Uploader & Manual Entry Form */}
@@ -1349,6 +1488,137 @@ Silakan gunakan tombol ekspor di bawah untuk mengambil template kalkulasi rancan
                   )}
 
                 </div>
+              </div>
+            )}
+
+            {activeDashboardTab === 'accounts' && userEmail === 'muhamadrizkialfiann@gmail.com' && (
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm animate-fade-in text-left font-sans" id="accounts-approval-panel">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5 mb-6">
+                  <div>
+                    <h3 className="text-lg font-black text-[#0B2C56] font-display flex items-center gap-2">
+                      <Users className="h-5 w-5 text-white bg-[#00A4E4] p-1 rounded-lg" />
+                      Manajemen Akun Anggota Pendaftar
+                    </h3>
+                    <p className="text-slate-500 text-xs mt-1">
+                      Sebagai Admin Utama (Master Data), Anda dapat meninjau, menyetujui (ACC), atau menolak pendaftaran akun karyawan di bawah ini.
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchRegisteredUsers}
+                    disabled={isLoadingUsers}
+                    className="self-start sm:self-center bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-950 font-bold text-xs py-2 px-4 rounded-xl border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+                    <span>Muat Ulang Data</span>
+                  </button>
+                </div>
+
+                {isLoadingUsers ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
+                    <RefreshCw className="h-8 w-8 animate-spin text-[#00A4E4]" />
+                    <span className="text-xs font-semibold">Memuat database pendaftar...</span>
+                  </div>
+                ) : registeredUsers.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs font-medium">
+                    Belum ada pendaftaran akun yang tercatat di Firestore database.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
+                          <th className="py-3 px-4">Nama Lengkap</th>
+                          <th className="py-3 px-4">Email Karyawan</th>
+                          <th className="py-3 px-4">Divisi Pilihan</th>
+                          <th className="py-3 px-4">Tanggal Daftar</th>
+                          <th className="py-3 px-4">Status Akun</th>
+                          <th className="py-3 px-4 text-right">Opsi Tindakan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                        {registeredUsers.map((user) => {
+                          const isMaster = user.email === 'muhamadrizkialfiann@gmail.com';
+                          const isDemo = user.email === 'prama@pancaran-group.co.id';
+                          
+                          return (
+                            <tr key={user.id || user.email} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3.5 px-4">
+                                <span className="font-extrabold text-slate-900 block">{user.fullName || 'Tanpa Nama'}</span>
+                                {isMaster && (
+                                  <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-[#0B2C56] text-white text-[8px] font-bold rounded">
+                                    MASTER ADMIN
+                                  </span>
+                                )}
+                                {isDemo && (
+                                  <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-sky-50 text-[#00A4E4] border border-[#00A4E4]/30 text-[8px] font-bold rounded">
+                                    DEMO AKUN
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-4 font-mono text-slate-600">{user.email}</td>
+                              <td className="py-3.5 px-4">
+                                <span className="capitalize px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[10px] font-extrabold text-slate-500">
+                                  {user.division}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono text-slate-400">
+                                {new Date(user.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                {user.status === 'approved' ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                    APPROVED / ACC
+                                  </span>
+                                ) : user.status === 'rejected' ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                    REJECTED (Ditolak)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold animate-pulse">
+                                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                                    PENDING
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                {isMaster || isDemo ? (
+                                  <span className="text-[10px] text-slate-400 font-mono italic">Kunci Sistem</span>
+                                ) : (
+                                  <div className="flex gap-1.5 justify-end">
+                                    <button
+                                      onClick={() => handleUserStatusUpdate(user.email, 'approved')}
+                                      disabled={user.status === 'approved'}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border ${
+                                        user.status === 'approved'
+                                          ? 'bg-slate-50 text-slate-300 border-slate-200'
+                                          : 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                      }`}
+                                    >
+                                      ACC
+                                    </button>
+                                    <button
+                                      onClick={() => handleUserStatusUpdate(user.email, 'rejected')}
+                                      disabled={user.status === 'rejected'}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border ${
+                                        user.status === 'rejected'
+                                          ? 'bg-slate-50 text-slate-300 border-slate-200'
+                                          : 'bg-white hover:bg-red-50 text-red-500 hover:text-red-700 border-slate-100'
+                                      }`}
+                                    >
+                                      Tolak
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
