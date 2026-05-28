@@ -253,24 +253,39 @@ app.post("/api/chat", async (req, res) => {
         { text: message || "Analisis lampiran berkas ini dan hubungkan dengan strategi PM divisi Anda." },
         filePart
       ];
+    } else if (typeof finalMessage === 'string') {
+      finalMessage = { text: message };
     }
 
-    const response = await chat.sendMessage({
+    // Set headers for streaming response
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const streamResponse = await chat.sendMessageStream({
       message: finalMessage
     });
 
-    res.json({
-      role: "assistant",
-      text: response.text,
-      groundingMetadata: response.candidates?.[0]?.groundingMetadata || null
-    });
+    for await (const chunk of streamResponse) {
+      const text = chunk.text;
+      if (text) {
+        res.write(text);
+      }
+    }
+    res.end();
 
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    res.status(500).json({
-      error: "Terjadi kesalahan pada server saat menghubungkan ke PRAMA AI Engine.",
-      details: error.message || error
-    });
+    // If headers are already sent, we cannot send JSON error
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Terjadi kesalahan pada server saat menghubungkan ke PRAMA AI Engine.",
+        details: error.message || error
+      });
+    } else {
+      res.end();
+    }
   }
 });
 

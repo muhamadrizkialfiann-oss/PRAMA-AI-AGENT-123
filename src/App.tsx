@@ -618,25 +618,64 @@ export default function App() {
         })
       });
 
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        throw new Error(data.error || "Gagal mendapat balasan dari PRAMA.");
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Gagal mendapat balasan dari PRAMA.");
+        }
+        throw new Error("Gagal menghubungkan ke server PRAMA.");
       }
 
+      // Ready to update AI message in real-time chunk-by-chunk
+      const aiMsgId = `ai-${Date.now()}`;
+      let accumulatedText = '';
+
       const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
+        id: aiMsgId,
         role: 'assistant',
-        content: data.text,
+        content: '',
         timestamp: new Date()
       };
 
-      const finalChats = {
-        ...chats,
-        [activeDivisionId]: [...updatedDivisionMsgs, aiMsg]
-      };
-      setChats(finalChats);
-      saveChatsToStorage(finalChats);
+      // Set initial state with empty AI message so we can stream into it
+      setChats(prev => {
+        const updated = {
+          ...prev,
+          [activeDivisionId]: [...(prev[activeDivisionId] || []), aiMsg]
+        };
+        return updated;
+      });
+
+      setIsLoading(false);
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          accumulatedText += chunk;
+
+          // Update message content in state
+          setChats(prev => {
+            const list = prev[activeDivisionId] || [];
+            const nextList = list.map(m => m.id === aiMsgId ? { ...m, content: accumulatedText } : m);
+            return {
+              ...prev,
+              [activeDivisionId]: nextList
+            };
+          });
+        }
+      }
+
+      // After finishing streaming, save to local storage
+      setChats(prev => {
+        saveChatsToStorage(prev);
+        return prev;
+      });
 
     } catch (err: any) {
       console.warn("AI error, running fallback simulation response:", err);
